@@ -92,12 +92,15 @@ GPU Stack](http://www.cs.rochester.edu/~kmenycht/papers/atc13-menychtas.pdf)
 If you use or modify this software, you are required to include these
 references and respect the intention of the author to release it as
 Free Software. Please support this effort by pushing any changes and
-improvements you make back to this repository. Last, please understand
-that despite the effort to build a robust, quality framework, this
-work has served primarily educational and researh purposes. Bugs,
-open TODOs, puzzling comments and all sorts of bad coding practices
-might appear in this repository. Please commit your improvements as
-you see fit.
+improvements you make back to this repository.
 
+Last, please understand that despite the effort to build a robust, quality
+framework, this software has been developed to serve primarily educational
+and researh purposes. Additions that add to the stability or help with
+usability are likely to be added. In the meantime, known bugs, unnecessary
+or necessary TODOs, puzzling and perhaps inapprropriate comments and all
+sorts of loose coding practices might appear in this repository.
+The author is solely responsible for those. If you use this code,
+take no offence and commit your improvements as you see fit.
 
 CopyLeft, Konstnantinos Menychtas, 2014
