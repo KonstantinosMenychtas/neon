@@ -80,7 +80,7 @@ to build NEON. Only
 [mmio-trace](https://www.kernel.org/doc/Documentation/trace/mmiotrace.txt),
 now in mainline kernel, is used in NEON.
 
-Last, NEON is the product of research conducted at the University of Rochester
+NEON is the product of research conducted at the University of Rochester
 and supported by various NSF/other grants.
 Please see the following references for a non-comprehensive list:
 - [Disengaged Scheduling for Fair, Protected Access to Fast Computational
@@ -89,11 +89,15 @@ Accelerators](http://www.cs.rochester.edu/~kmenycht/papers/asplos14-menychtas.pd
 - [Enabling OS Research by Inferring Interactions in the Black-Box
 GPU Stack](http://www.cs.rochester.edu/~kmenycht/papers/atc13-menychtas.pdf)
 (USENIX ATC'13)
-
-If you use or modify this software for educational or research purposes,
-you are required to include these references and respect the intention of
-the author to release it as Free Software. Please support this effort
-by pushing any changes and improvements you make back to this repository.
+If you use or modify this software, you are required to include these
+references and respect the intention of the author to release it as
+Free Software. Please support this effort by pushing any changes and
+improvements you make back to this repository. Last, please understand
+that despite the effort to build a robust, quality framework, this
+work has served primarily educational and researh purposes. Bugs,
+open TODOs, puzzling comments and all sorts of bad coding practices
+might appear in this repository. Please commit your improvements as
+you see fit.
 
 
 CopyLeft, Konstnantinos Menychtas, 2014
