@@ -98,7 +98,9 @@ improvements you make back to this repository.
 
 Last, please understand that despite the effort to build a robust, quality
 framework, this software has been developed to serve primarily educational
-and researh purposes. Additions that add to the stability or help with
+and researh purposes. This code is not necessarily the exact same code
+used for experiments listed in aforementioned publications.
+Clarifications and additions that add to the stability or help with
 usability are likely to be added. In the meantime, known bugs, unnecessary
 or necessary TODOs, puzzling and perhaps inapprropriate comments and all
 sorts of loose coding practices might appear in this repository.
