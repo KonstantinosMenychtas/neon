@@ -83,12 +83,14 @@ now in mainline kernel, is used in NEON.
 NEON is the product of research conducted at the University of Rochester
 and supported by various NSF/other grants.
 Please see the following references for a non-comprehensive list:
+
 - [Disengaged Scheduling for Fair, Protected Access to Fast Computational
 Accelerators](http://www.cs.rochester.edu/~kmenycht/papers/asplos14-menychtas.pdf)
 (ASPLOS'14)
 - [Enabling OS Research by Inferring Interactions in the Black-Box
 GPU Stack](http://www.cs.rochester.edu/~kmenycht/papers/atc13-menychtas.pdf)
 (USENIX ATC'13)
+
 If you use or modify this software, you are required to include these
 references and respect the intention of the author to release it as
 Free Software. Please support this effort by pushing any changes and
