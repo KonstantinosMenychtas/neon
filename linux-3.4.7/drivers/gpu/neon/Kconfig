@@ -1,0 +1,9 @@
+config NEON_FACE
+       bool "NEON interface"
+       default y
+       depends on X86_64
+       help
+	  Choose this option if you have a system that has an Nvidia
+          Tesla/Fermi GPU for which you want to enable the kernel-level
+          GPU-workload scheduling interface. No effect should be noticeable
+          on the system unless the respective module is loaded.

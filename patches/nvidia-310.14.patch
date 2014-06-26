@@ -1,0 +1,354 @@
+diff -rupN NVIDIA-Linux-x86-310.14.orig/kernel/nv.c NVIDIA-Linux-x86-310.14/kernel/nv.c
+--- NVIDIA-Linux-x86-310.14.orig/kernel/nv.c	2014-03-01 16:43:43.443388990 -0500
++++ NVIDIA-Linux-x86-310.14/kernel/nv.c	2014-03-01 16:47:58.008014210 -0500
+@@ -15,6 +15,10 @@
+ #include "nv-reg.h"
+ #include "rmil.h"
+ 
++#ifdef   CONFIG_NEON_FACE
++#include "neon/neon_face.h"
++#endif // CONFIG_NEON_FACE
++
+ #if defined(MODULE_LICENSE)
+ MODULE_LICENSE("NVIDIA");
+ #endif
+@@ -1821,6 +1825,9 @@ int nv_kern_ioctl(
+     void *arg_copy = NULL;
+     size_t arg_size;
+     int arg_cmd;
++#ifdef   CONFIG_NEON_FACE
++    void *neon_arg_pre = NULL;
++#endif // CONFIG_NEON_FACE
+ 
+     nv_printf(NV_DBG_INFO, "NVRM: ioctl(0x%x, 0x%x, 0x%x)\n",
+         _IOC_NR(cmd), (unsigned int) i_arg, _IOC_SIZE(cmd));
+@@ -1878,6 +1885,26 @@ int nv_kern_ioctl(
+         goto done;
+     }
+ 
++#ifdef   CONFIG_NEON_FACE
++    NV_KMALLOC(neon_arg_pre, arg_size);
++    if (neon_arg_pre == NULL) {
++      nv_printf(NV_DBG_ERRORS, "NVRM: failed to allocate ioctl memory\n");
++      (*neon_face->tweet)("neon_arg_pre kmalloc failed");
++      status = -ENOMEM;
++      goto done;
++    } else {
++      void *check = NULL;
++      check = memcpy(neon_arg_pre, arg_copy, arg_size);
++      if (check != neon_arg_pre) {
++        nv_printf(NV_DBG_ERRORS, "NVRM: failed to copy kernel data\n");
++        (*neon_face->tweet)("neon_arg_pre memcpy failed");
++        status = -EFAULT;
++        goto done;
++      }
++    }
++    (*neon_face->ioctl)(arg_cmd, arg_copy, NULL);
++#endif // CONFIG_NEON_FACE
++
+     switch (arg_cmd)
+     {
+         /* pass out info about the card */
+@@ -1977,6 +2004,11 @@ int nv_kern_ioctl(
+     }
+ 
+ done:
++#ifdef   CONFIG_NEON_FACE
++    (*neon_face->ioctl)(arg_cmd, neon_arg_pre, arg_copy);
++    NV_KFREE(neon_arg_pre, arg_size);
++#endif // CONFIG_NEON_FACE
++
+     up(&nvfp->fops_sp_lock[NV_FOPS_STACK_INDEX_IOCTL]);
+     if (arg_copy != NULL)
+     {
+@@ -3355,3 +3387,43 @@ RM_STATUS NV_API_CALL nv_log_error(
+ #endif
+     return status;
+ }
++
++#ifdef CONFIG_NEON_FACE
++void
++neon_kern_probe(unsigned long long *buf)
++{
++  unsigned int i = 0;
++  nv_linux_state_t *nvl = nv_linux_devices;
++
++  while (nvl != NULL && i < 2 * NV_MAX_DEVICES) {
++    nv_state_t *nv = NV_STATE_PTR(nvl);
++    if(buf == NULL) {
++      // query-print mode
++      nv_printf(NV_DBG_INFO,    
++                "NVRM: PCI:%04x:%02x:%02x (%04x:%04x%04x): BAR0 @ 0x%llx (%lluMB)\n",
++                nv->domain, nv->bus, nv->slot, 
++                nv->vendor_id, nv->device_id, nv->subsystem_id, nv->regs->address,
++                (nv->regs->size >> 20));
++      nv_printf(NV_DBG_INFO,
++                "NVRM: PCI:%04x:%02x:%02x (%04x:%04x:%04x): BAR1 @ 0x%llx (%lluMB)\n",
++                nv->domain, nv->bus, nv->slot, 
++                nv->vendor_id, nv->device_id, nv->subsystem_id, nv->fb->address,
++                (nv->fb->size >> 20));
++    } else {
++      // query-save mode
++      buf[i+0] = (unsigned long long) nv->bars[NV_GPU_BAR_INDEX_REGS].address;
++      buf[i+1] = (unsigned long long) nv->bars[NV_GPU_BAR_INDEX_REGS].size;
++      buf[i+2] = (unsigned long long) nv->fb->address;
++      buf[i+3] = (unsigned long long) nv->fb->size;
++      buf[i+4] = (unsigned long long) nv->vendor_id;
++      buf[i+5] = (unsigned long long) nv->device_id;
++      buf[i+6] = (unsigned long long) nv->subsystem_id;
++    }
++    nvl = nvl->next;
++    i+=7;
++  }
++
++  return;
++}
++EXPORT_SYMBOL(neon_kern_probe);
++#endif // CONFIG_NEON_FACE
+diff -rupN NVIDIA-Linux-x86-310.14.orig/kernel/nv.h NVIDIA-Linux-x86-310.14/kernel/nv.h
+--- NVIDIA-Linux-x86-310.14.orig/kernel/nv.h	2014-03-01 16:43:43.442389032 -0500
++++ NVIDIA-Linux-x86-310.14/kernel/nv.h	2014-03-01 16:47:58.431990648 -0500
+@@ -626,4 +626,8 @@ static inline int nv_count_bits(NvU64 wo
+     return (int)(bits);
+ }
+ 
++#ifdef CONFIG_NEON_FACE
++void neon_kern_probe(unsigned long long *buf);
++#endif // CONFIG_NEON_FACE
++
+ #endif
+diff -rupN NVIDIA-Linux-x86-310.14.orig/kernel/nv-mlock.c NVIDIA-Linux-x86-310.14/kernel/nv-mlock.c
+--- NVIDIA-Linux-x86-310.14.orig/kernel/nv-mlock.c	2014-03-01 16:43:43.443388990 -0500
++++ NVIDIA-Linux-x86-310.14/kernel/nv-mlock.c	2014-03-01 16:47:58.846966591 -0500
+@@ -14,6 +14,10 @@
+ #include "os-interface.h"
+ #include "nv-linux.h"
+ 
++#ifdef   CONFIG_NEON_FACE
++#include "neon/neon_face.h"
++#endif // CONFIG_NEON_FACE
++
+ RM_STATUS NV_API_CALL nv_lock_user_pages(
+     nv_state_t *nv,
+     void       *address,
+@@ -88,6 +92,15 @@ RM_STATUS NV_API_CALL nv_lock_user_pages
+     }
+ 
+     *private = user_pages;
++
++#ifdef    CONFIG_NEON_FACE
++    (*neon_face->tweet)("PIN-PAGES");
++    (*neon_face->pin_pages)(address,
++                            user_pages,
++                            pte_array,
++                            page_count);
++#endif // CONFIG_NEON_FACE
++
+     return RM_OK;
+ #else
+     return RM_ERR_NOT_SUPPORTED;
+@@ -108,6 +121,13 @@ RM_STATUS NV_API_CALL nv_unlock_user_pag
+     struct page **user_pages = private;
+     NvU32 i;
+ 
++#ifdef    CONFIG_NEON_FACE
++    (*neon_face->tweet)("UNPIN-PAGES");
++    (*neon_face->unpin_pages)(user_pages,
++                              pte_array,
++                              page_count);
++#endif // CONFIG_NEON_FACE
++
+     for (i = 0; i < page_count; i++)
+     {
+         pci_unmap_page(dev, pte_array[i],
+diff -rupN NVIDIA-Linux-x86-310.14.orig/kernel/nv-mmap.c NVIDIA-Linux-x86-310.14/kernel/nv-mmap.c
+--- NVIDIA-Linux-x86-310.14.orig/kernel/nv-mmap.c	2014-03-01 16:43:43.442389032 -0500
++++ NVIDIA-Linux-x86-310.14/kernel/nv-mmap.c	2014-03-01 16:47:59.470931656 -0500
+@@ -14,6 +14,10 @@
+ #include "os-interface.h"
+ #include "nv-linux.h"
+ 
++#ifdef   CONFIG_NEON_FACE
++#include "neon/neon_face.h"
++#endif // CONFIG_NEON_FACE
++
+ /*
+  * The 'struct vm_operations' open() callback is called by the Linux
+  * kernel when the parent VMA is split or copied, close() when the
+@@ -276,6 +280,16 @@ int nv_kern_mmap(
+         }
+ 
+         vma->vm_flags |= VM_IO;
++
++#ifdef   CONFIG_NEON_FACE
++        // I/O space
++        (*neon_face->tweet)("MMAP-ISREG");
++        (*neon_face->map_pages)(vma,
++                                vma->vm_start,
++                                NV_VMA_OFFSET(vma),
++                                NV_VMA_SIZE(vma),
++                                NEON_REGISTER);
++#endif // CONFIG_NEON_FACE
+     }
+     else if (IS_FB_OFFSET(nv, NV_VMA_OFFSET(vma), NV_VMA_SIZE(vma)))
+     {
+@@ -310,6 +324,15 @@ int nv_kern_mmap(
+         }
+ 
+         vma->vm_flags |= VM_IO;
++        
++#ifdef    CONFIG_NEON_FACE
++        (*neon_face->tweet)("MMAP-ISFB");
++        (*neon_face->map_pages)(vma,
++                                vma->vm_start,
++                                NV_VMA_OFFSET(vma),
++                                NV_VMA_SIZE(vma),
++                                NEON_FRAMEBUFFER);
++#endif // CONFIG_NEON_FACE
+     }
+     else
+     {
+@@ -400,7 +423,16 @@ int nv_kern_mmap(
+ #if defined(VM_DRIVER_PAGES)
+         vma->vm_flags |= VM_DRIVER_PAGES;
+ #endif
+-    }
++
++#ifdef   CONFIG_NEON_FACE
++        (*neon_face->tweet)("MMAP-ISMEM");
++        (*neon_face->map_pages)(vma,
++                                vma->vm_start,
++                                NV_VMA_OFFSET(vma),
++                                NV_VMA_SIZE(vma),
++                                NEON_SYSTEM);
++#endif // CONFIG_NEON_FACE
++}
+ 
+     NV_VMA_FILE(vma) = file;
+ 
+diff -rupN NVIDIA-Linux-x86-310.14.orig/kernel/os-interface.c NVIDIA-Linux-x86-310.14/kernel/os-interface.c
+--- NVIDIA-Linux-x86-310.14.orig/kernel/os-interface.c	2014-03-01 16:43:43.441389068 -0500
++++ NVIDIA-Linux-x86-310.14/kernel/os-interface.c	2014-03-01 16:48:00.513871826 -0500
+@@ -25,6 +25,10 @@
+ #include "os-interface.h"
+ #include "nv-linux.h"
+ 
++#ifdef CONFIG_NEON_FACE
++#include <neon/neon_face.h>
++#endif // CONFIG_NEON_FACE
++
+ RM_STATUS NV_API_CALL os_disable_console_access(void)
+ {
+     NV_ACQUIRE_CONSOLE_SEM();
+@@ -624,10 +628,13 @@ RM_STATUS NV_API_CALL os_get_current_thr
+ /*                                                                             */
+ /*******************************************************************************/
+ 
+-
++#ifndef CONFIG_NEON_FACE
+ // The current debug display level (default to maximum debug level)
+ NvU32 cur_debuglevel = 0xffffffff;
+-
++# else // CONFIG_NEON_FACE
++// NvU32 cur_debuglevel = DBG_LEVEL_INFO;
++NvU32 cur_debuglevel = 0xffffffff; 
++#endif // CONFIG_NEON_FACE
+ 
+ //
+ // this is what actually outputs the data.
+@@ -644,7 +651,12 @@ inline void NV_API_CALL out_string(const
+     }
+     else
+ #endif
++#ifdef CONFIG_NEON_FACE
++      // log this message
++      (*neon_face->tweet)(str);
++#else // !CONFIG_NEON_FACE
+         printk("%s", str);
++#endif // CONFIG_NEON_FACE
+ 
+ #if defined(DEBUG)
+     if (NV_NUM_CPUS() > 1)
+diff -rupN NVIDIA-Linux-x86-310.14.orig/README-neon NVIDIA-Linux-x86-310.14/README-neon
+--- NVIDIA-Linux-x86-310.14.orig/README-neon	1969-12-31 19:00:00.000000000 -0500
++++ NVIDIA-Linux-x86-310.14/README-neon	2014-03-02 11:55:13.691889625 -0500
+@@ -0,0 +1,39 @@
++/******************************************************************************/
++/*!
++  \author  Konstantinos Menychtas --- kmenycht@cs.rochester.edu
++  \brief  "NEON interface for black-box GPU kernel-level management"
++*/
++/******************************************************************************/
++
++Files in this directory contain modifications to the Nvidia
++driver to facilitate the interface to NEON. Code in this directory
++is released in a fashion that agrees with Nvidia binary driver license.
++
++Files in this directory are listed below.
++If you 'd rather apply changes yourself (rather than apply a patch),
++you should be able to easily merge this set of files into the
++Nvidia binary driver v310.14 which you can grab from
++http://www.nvidia.com/download/driverResults.aspx/50101/en-us
++or the appropriate Nvidia archive.
++
++├── kernel
++│   ├── nv.c
++│   ├── nv.h
++│   ├── nv-mlock.c
++│   ├── nv-mmap.c
++│   └── os-interface.c
++├── README-neon
++└── README.txt
++
++We have tested NEON with the particular version of the Nvidia driver
++suggested (310.14), but since the interface to NEON is small, it should
++be easy to port to a newer driver version.
++Porting to a different setup than what has been tested, might need
++extra care, especially if the nvidia-driver interface to the
++kernel has changed.
++
++Note: It is possible to entirely do away with source changes on
++the Nvidia binary driver interface, by passing the responsibility
++for identifying the "hooks" in this code back to the mainline kernel.
++Since the only reason to do this is licensing implications, it has
++not been a priority for NEON. 
+diff -rupN NVIDIA-Linux-x86-310.14.orig/README-neon~ NVIDIA-Linux-x86-310.14/README-neon~
+--- NVIDIA-Linux-x86-310.14.orig/README-neon~	1969-12-31 19:00:00.000000000 -0500
++++ NVIDIA-Linux-x86-310.14/README-neon~	2014-03-02 11:49:12.531362419 -0500
+@@ -0,0 +1,36 @@
++/******************************************************************************/
++/*!
++  \author  Konstantinos Menychtas --- kmenycht@cs.rochester.edu
++  \brief  "NEON interface for black-box GPU kernel-level management"
++*/
++/******************************************************************************/
++
++Files in this directory contain modifications to the Nvidia
++driver to facilitate the interface to NEON. Code in this directory
++is released in a fashion that agrees with Nvidia binary driver license.
++
++├── kernel
++└── README.txt
++└── README-neon
++|
++│   ├── nv.c
++│   ├── nv.h
++│   ├── nv-mlock.c
++│   ├── nv-mmap.c
++|   └── os-interface.c
++
++
++If you 'd rather apply changes yourself (rather than apply a patch),
++you should be able to easily merge this set of files into the
++Nvidia binary driver v310.14 which you can grab from
++http://www.nvidia.com/download/driverResults.aspx/50101/en-us
++or the appropriate Nvidia archive.
++
++We have tested NEON with the configuration file included (config.3.4.7-neon)
++and non other; porting to a different setup will require additional work,
++especially regarding synchronization.
++
++Note: It is possible to entirely do away with source changes on
++the Nvidia binary driver interface, by passing the responsibility
++for identifying the "hooks" in this code back to the mainline kernel.
++
